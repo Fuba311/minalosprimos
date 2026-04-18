@@ -9,6 +9,8 @@ Qué hace:
 - Permite refresco automático.
 - Si el backend es SQL, permite cargar un mes manualmente desde la interfaz
   y hacer upsert por mes usando la columna fecha.
+- En la carga manual se puede fijar un dividendo real manual o dejarlo vacio
+  para recalcularlo automaticamente desde dividendo nominal e IPC.
 - Puede autocompletar IPC, cobre y USD/CLP con fuentes públicas más actuales.
 
 Uso rápido:
@@ -644,7 +646,15 @@ def obtener_valor_yahoo_para_mes(
 
 def descargar_tabla_html(url: str, timeout_seconds: int) -> pd.DataFrame:
     html = descargar_html_publico(url, timeout_seconds)
-    tablas = pd.read_html(io.StringIO(html), decimal=",", thousands=".")
+
+    # pandas.read_html necesita un parser HTML opcional.
+    # En Render, instala lxml en requirements.txt. Si lxml no esta,
+    # intenta usar html5lib como respaldo.
+    try:
+        tablas = pd.read_html(io.StringIO(html), decimal=",", thousands=".", flavor="lxml")
+    except ImportError:
+        tablas = pd.read_html(io.StringIO(html), decimal=",", thousands=".", flavor="html5lib")
+
     if not tablas:
         raise ValueError(f"No pude leer tablas desde {url}.")
     return tablas[0]
@@ -898,6 +908,7 @@ def obtener_mercado_para_mes(fecha_mes: str | pd.Timestamp, config: Config) -> d
 def construir_registro_manual(
     fecha: str,
     dividendo_total_nominal: Optional[float],
+    dividendo_real_base_ultimo_ipc: Optional[float],
     ipc: Optional[float],
     dry_tons: Optional[float],
     regalia: Optional[float],
@@ -961,6 +972,13 @@ def construir_registro_manual(
             {
                 "fecha": fecha_mes,
                 "dividendo_total_nominal": float(dividendo_total_nominal),
+                # Si este campo queda vacio, se borra el valor real manual anterior
+                # y preparar_dataframe recalcula dividendo_real con nominal * ipc_base / ipc.
+                "dividendo_real_base_ultimo_ipc": (
+                    np.nan
+                    if dividendo_real_base_ultimo_ipc is None or pd.isna(dividendo_real_base_ultimo_ipc)
+                    else float(dividendo_real_base_ultimo_ipc)
+                ),
                 "ipc": float(ipc),
                 "dry_tons": float(dry_tons),
                 "regalia": regalia_valor,
@@ -976,6 +994,7 @@ def construir_registro_manual(
 def upsert_registro_manual(
     fecha: str,
     dividendo_total_nominal: Optional[float],
+    dividendo_real_base_ultimo_ipc: Optional[float],
     ipc: Optional[float],
     dry_tons: Optional[float],
     regalia: Optional[float],
@@ -990,6 +1009,7 @@ def upsert_registro_manual(
     fila_nueva, mensaje_mercado = construir_registro_manual(
         fecha=fecha,
         dividendo_total_nominal=dividendo_total_nominal,
+        dividendo_real_base_ultimo_ipc=dividendo_real_base_ultimo_ipc,
         ipc=ipc,
         dry_tons=dry_tons,
         regalia=regalia,
@@ -1640,6 +1660,7 @@ def construir_tabla_datos(df: pd.DataFrame):
     cols = [
         "fecha_label",
         "dividendo_total_nominal",
+        "dividendo_real_base_ultimo_ipc",
         "dividendo_real_mm",
         "cobre_real_clp_ton",
         "dry_tons",
@@ -1655,6 +1676,7 @@ def construir_tabla_datos(df: pd.DataFrame):
     out = out.rename(columns={
         "fecha_label": "fecha",
         "dividendo_total_nominal": "dividendo nominal (clp)",
+        "dividendo_real_base_ultimo_ipc": "dividendo real manual base ipc (clp)",
         "dividendo_real_mm": "dividendo real (mm clp)",
         "cobre_real_clp_ton": "cobre real (clp por tonelada)",
         "dry_tons": "toneladas secas",
@@ -2057,7 +2079,8 @@ def build_app(config: Config) -> Dash:
                                             html.H4("Carga manual mensual", style={"marginTop": 0, "marginBottom": "10px", "color": AZUL_OSCURO}),
                                             html.Div(
                                                 "Guarda un solo mes en la base SQL. Si el mes ya existe, se actualiza. "
-                                                "IPC, cobre y USD/CLP se pueden completar automaticamente desde fuentes publicas mas actuales y luego puedes corregirlos antes de guardar.",
+                                                "IPC, cobre y USD/CLP se pueden completar automaticamente desde fuentes publicas mas actuales y luego puedes corregirlos antes de guardar. "
+                                                "Si dejas Dividendo real vacio, se recalcula desde dividendo nominal e IPC y se borra cualquier valor real manual anterior.",
                                                 style={"fontSize": 12, "color": AZUL_MUTED, "marginBottom": "18px"}
                                             ),
                                             html.Div(
@@ -2073,6 +2096,16 @@ def build_app(config: Config) -> Dash:
                                                     campo_formulario(
                                                         "Dividendo nominal (CLP)",
                                                         dcc.Input(id="form-dividendo-nominal", type="number", debounce=True, style=FORM_INPUT_STYLE),
+                                                    ),
+                                                    campo_formulario(
+                                                        "Dividendo real base ultimo IPC (CLP, opcional)",
+                                                        dcc.Input(
+                                                            id="form-dividendo-real",
+                                                            type="number",
+                                                            debounce=True,
+                                                            placeholder="Vacio = recalcular",
+                                                            style=FORM_INPUT_STYLE,
+                                                        ),
                                                     ),
                                                     campo_formulario(
                                                         "IPC",
@@ -2153,6 +2186,7 @@ def build_app(config: Config) -> Dash:
         Input("confirmar-ipc-rezago", "submit_n_clicks"),
         State("form-fecha", "date"),
         State("form-dividendo-nominal", "value"),
+        State("form-dividendo-real", "value"),
         State("form-ipc", "value"),
         State("form-dry-tons", "value"),
         State("form-regalia", "value"),
@@ -2169,6 +2203,7 @@ def build_app(config: Config) -> Dash:
         confirmar_ipc,
         fecha_manual,
         dividendo_nominal,
+        dividendo_real_manual,
         ipc,
         dry_tons,
         regalia,
@@ -2214,6 +2249,7 @@ def build_app(config: Config) -> Dash:
                 df, mensaje_mercado = upsert_registro_manual(
                     fecha=pendiente_ipc.get("fecha_manual"),
                     dividendo_total_nominal=pendiente_ipc.get("dividendo_nominal"),
+                    dividendo_real_base_ultimo_ipc=pendiente_ipc.get("dividendo_real_manual"),
                     ipc=pendiente_ipc.get("ipc"),
                     dry_tons=pendiente_ipc.get("dry_tons"),
                     regalia=pendiente_ipc.get("regalia"),
@@ -2265,6 +2301,7 @@ def build_app(config: Config) -> Dash:
                                 "accion": "guardar",
                                 "fecha_manual": fecha_manual,
                                 "dividendo_nominal": dividendo_nominal,
+                                "dividendo_real_manual": dividendo_real_manual,
                                 "ipc": ipc,
                                 "dry_tons": dry_tons,
                                 "regalia": regalia,
@@ -2287,6 +2324,7 @@ def build_app(config: Config) -> Dash:
                     df, mensaje_mercado = upsert_registro_manual(
                         fecha=fecha_manual,
                         dividendo_total_nominal=dividendo_nominal,
+                        dividendo_real_base_ultimo_ipc=dividendo_real_manual,
                         ipc=ipc,
                         dry_tons=dry_tons,
                         regalia=regalia,
