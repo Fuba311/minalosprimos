@@ -1,0 +1,10 @@
+dash
+plotly
+pandas
+numpy
+requests
+SQLAlchemy
+psycopg2-binary
+openpyxl
+gunicorn
+dash-ag-grid
