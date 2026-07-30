@@ -1,3 +1,4 @@
+
 """
 Dashboard interactivo en Dash + Plotly para analizar dividendos, cobre y producción.
 
@@ -99,6 +100,8 @@ class Config:
 
 
 CFG = Config()
+APP_DESIGN_VERSION = "DESIGN V3 · VERIFIED · 30 JUL 2026"
+
 BUILD_VERSION = (
     os.getenv("RENDER_GIT_COMMIT")
     or os.getenv("DASH_BUILD_VERSION")
@@ -1113,21 +1116,21 @@ def ajustar_modelo_anomalias(df: pd.DataFrame) -> pd.DataFrame:
 # Gráficos
 # -------------------------------------------------------------------
 
-AZUL_OSCURO = "#143B4D"
-AZUL_PRIMARIO = "#146C94"
-AZUL_MEDIO = "#2F80C9"
-AZUL_CLARO = "#CFE7FA"
-AZUL_SUAVE = "#EEF6FD"
-AZUL_TINTA = "#17212B"
-AZUL_MUTED = "#61707A"
-AZUL_BORDE = "#D7E4E6"
-AZUL_PANEL = "#FAFCFD"
-AZUL_FONDO = "#F4F7F8"
-AZUL_ACENTO_1 = "#1B8FD1"
-AZUL_ACENTO_2 = "#5EB4E7"
-AZUL_ACENTO_3 = "#8FD3FF"
-AZUL_ACENTO_4 = "#0A5E86"
-PALETA_AZUL = [AZUL_PRIMARIO, AZUL_ACENTO_1, AZUL_MEDIO, AZUL_ACENTO_2, AZUL_ACENTO_4, AZUL_OSCURO]
+AZUL_OSCURO = "#182327"
+AZUL_PRIMARIO = "#2F6B65"
+AZUL_MEDIO = "#4D8D86"
+AZUL_CLARO = "#DCEAE7"
+AZUL_SUAVE = "#F0F5F3"
+AZUL_TINTA = "#172126"
+AZUL_MUTED = "#6B777B"
+AZUL_BORDE = "#DDE3E1"
+AZUL_PANEL = "#FBFCFB"
+AZUL_FONDO = "#F2F4F1"
+AZUL_ACENTO_1 = "#C77842"
+AZUL_ACENTO_2 = "#D9A06D"
+AZUL_ACENTO_3 = "#F0D7C0"
+AZUL_ACENTO_4 = "#8B4B24"
+PALETA_AZUL = [AZUL_PRIMARIO, AZUL_ACENTO_1, AZUL_MEDIO, AZUL_ACENTO_2, AZUL_OSCURO, "#849692"]
 FONT_FAMILY = "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
 
 
@@ -1143,17 +1146,17 @@ def aplicar_estilo_figura(
         template="plotly_white",
         title={
             "text": titulo,
-            "x": 0.01,
+            "x": 0.0,
             "xanchor": "left",
-            "font": {"size": 20, "color": AZUL_TINTA},
-            "pad": {"b": 40},
+            "font": {"size": 19, "color": AZUL_TINTA},
+            "pad": {"b": 24},
         },
         paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor=AZUL_PANEL,
-        font={"family": FONT_FAMILY, "color": AZUL_TINTA},
+        plot_bgcolor="rgba(0,0,0,0)",
+        font={"family": FONT_FAMILY, "color": AZUL_TINTA, "size": 13},
         colorway=PALETA_AZUL,
         hovermode=hovermode,
-        transition={"duration": 450, "easing": "cubic-in-out"},
+        transition={"duration": 320, "easing": "cubic-out"},
         legend={
             "title": {"text": legend_title},
             "orientation": "h",
@@ -1161,49 +1164,48 @@ def aplicar_estilo_figura(
             "y": 1.02,
             "xanchor": "left",
             "x": 0,
+            "font": {"size": 12, "color": AZUL_MUTED},
         },
-        hoverlabel={"bgcolor": "white", "bordercolor": AZUL_BORDE, "font": {"family": FONT_FAMILY}},
-        margin=dict(l=40, r=20, t=116, b=46),
+        hoverlabel={
+            "bgcolor": "#FFFFFF",
+            "bordercolor": AZUL_BORDE,
+            "font": {"family": FONT_FAMILY, "color": AZUL_TINTA, "size": 13},
+        },
+        margin=dict(l=48, r=22, t=96, b=52),
     )
     fig.update_xaxes(
         title_text=xaxis_title,
-        showgrid=True,
-        gridcolor=AZUL_BORDE,
+        showgrid=False,
         zeroline=False,
         linecolor=AZUL_BORDE,
         ticks="outside",
         tickcolor=AZUL_BORDE,
-        showspikes=True,
-        spikecolor=AZUL_MEDIO,
-        spikethickness=1,
-        spikedash="dot",
-        spikemode="across",
-        spikesnap="cursor",
+        tickfont={"color": AZUL_MUTED, "size": 11},
+        title_font={"color": AZUL_MUTED, "size": 12},
+        showspikes=False,
     )
     fig.update_yaxes(
         showgrid=True,
-        gridcolor=AZUL_BORDE,
+        gridcolor="#E8ECEA",
+        gridwidth=1,
         zeroline=False,
-        linecolor=AZUL_BORDE,
-        ticks="outside",
-        tickcolor=AZUL_BORDE,
-        showspikes=True,
-        spikecolor=AZUL_MEDIO,
-        spikethickness=1,
-        spikedash="dot",
+        linecolor="rgba(0,0,0,0)",
+        ticks="",
+        tickfont={"color": AZUL_MUTED, "size": 11},
+        title_font={"color": AZUL_MUTED, "size": 12},
+        showspikes=False,
     )
     if yaxis_title is not None:
         fig.update_yaxes(title_text=yaxis_title)
     return fig
 
+
 def _texto_barra_dividendo(valor: object) -> str:
-    """Etiqueta compacta para barras expresadas en millones de CLP."""
+    """Etiqueta entera para barras expresadas en millones de CLP."""
     valor_num = pd.to_numeric(pd.Series([valor]), errors="coerce").iloc[0]
     if pd.isna(valor_num):
         return ""
-    if abs(float(valor_num)) >= 100:
-        return fmt_es_num(float(valor_num), 0)
-    return fmt_es_num(float(valor_num), 1)
+    return fmt_es_num(float(valor_num), 0)
 
 
 def _mascara_etiquetas_dividendos(df: pd.DataFrame, modo: str) -> pd.Series:
@@ -1239,30 +1241,27 @@ def _mascara_etiquetas_dividendos(df: pd.DataFrame, modo: str) -> pd.Series:
 def grafico_dividendos(
     df: pd.DataFrame,
     ventana_ma: int,
-    modo_etiquetas: str = "auto",
+    modo_etiquetas: str = "ninguna",
+    mostrar_tendencia: str = "mostrar",
 ) -> go.Figure:
-    """Gráfico principal del panel, diseñado para lectura ejecutiva."""
+    """Gráfico principal: barras dominantes y tendencia claramente secundaria."""
     aux = df.copy().sort_values("fecha").reset_index(drop=True)
     aux["dividendo_real_mm"] = pd.to_numeric(aux["dividendo_real_mm"], errors="coerce")
     aux["media_movil"] = rolling_safe(aux["dividendo_real_mm"], ventana_ma)
     aux["variacion_mensual"] = aux["dividendo_real_mm"].pct_change(fill_method=None)
     aux["variacion_anual"] = aux["dividendo_real_mm"].pct_change(12, fill_method=None)
-    aux["vs_media_movil"] = aux["dividendo_real_mm"] / aux["media_movil"] - 1
+    aux["fecha_categoria"] = aux["fecha"].dt.strftime("%Y-%m")
 
-    # Valores preformateados en español para un hover consistente.
     aux["dividendo_txt"] = aux["dividendo_real_mm"].map(
-        lambda v: f"{fmt_es_num(v, 1)} MM CLP" if pd.notna(v) else "NA"
+        lambda v: f"{fmt_es_num(v, 0)} MM CLP" if pd.notna(v) else "NA"
     )
     aux["media_txt"] = aux["media_movil"].map(
-        lambda v: f"{fmt_es_num(v, 1)} MM CLP" if pd.notna(v) else "NA"
+        lambda v: f"{fmt_es_num(v, 0)} MM CLP" if pd.notna(v) else "NA"
     )
     aux["mom_txt"] = aux["variacion_mensual"].map(
         lambda v: fmt_es_pct(v, 1) if pd.notna(v) and np.isfinite(v) else "NA"
     )
     aux["yoy_txt"] = aux["variacion_anual"].map(
-        lambda v: fmt_es_pct(v, 1) if pd.notna(v) and np.isfinite(v) else "NA"
-    )
-    aux["vs_ma_txt"] = aux["vs_media_movil"].map(
         lambda v: fmt_es_pct(v, 1) if pd.notna(v) and np.isfinite(v) else "NA"
     )
 
@@ -1272,146 +1271,116 @@ def grafico_dividendos(
         for v, mostrar in zip(aux["dividendo_real_mm"], mascara_texto)
     ]
 
-    colores = []
-    for i, fila in aux.iterrows():
-        if i == len(aux) - 1:
-            colores.append(AZUL_OSCURO)
-        elif pd.isna(fila["dividendo_real_mm"]):
-            colores.append(AZUL_CLARO)
-        elif pd.notna(fila["media_movil"]) and fila["dividendo_real_mm"] >= fila["media_movil"]:
-            colores.append(AZUL_PRIMARIO)
-        else:
-            colores.append("#A9CCE3")
+    # Una sola familia cromática mantiene claro que todas las barras son valores reales.
+    colores = [AZUL_PRIMARIO] * len(aux)
+    if len(colores):
+        colores[-1] = AZUL_OSCURO
 
     customdata = np.column_stack(
-        [
-            aux["dividendo_txt"],
-            aux["media_txt"],
-            aux["mom_txt"],
-            aux["yoy_txt"],
-            aux["vs_ma_txt"],
-        ]
+        [aux["dividendo_txt"], aux["mom_txt"], aux["yoy_txt"], aux["media_txt"]]
     )
 
     fig = go.Figure()
+
+    # La tendencia se dibuja primero y detrás de las barras; no captura el hover.
+    if mostrar_tendencia != "ocultar":
+        fig.add_trace(
+            go.Scatter(
+                x=aux["fecha_categoria"],
+                y=aux["media_movil"],
+                mode="lines",
+                name=f"Tendencia suavizada ({ventana_ma} meses)",
+                line=dict(width=2.2, color=AZUL_ACENTO_1, dash="dot", shape="spline", smoothing=0.45),
+                opacity=0.88,
+                connectgaps=True,
+                hoverinfo="skip",
+            )
+        )
+
     fig.add_trace(
         go.Bar(
-            x=aux["fecha"],
+            x=aux["fecha_categoria"],
             y=aux["dividendo_real_mm"],
-            name="Dividendo real",
-            marker=dict(color=colores, line=dict(color="rgba(20,59,77,0.28)", width=0.8)),
+            name="Dividendo real mensual",
+            marker=dict(color=colores, line=dict(width=0)),
             text=aux["texto_barra"],
             textposition="outside",
-            textfont=dict(size=11, color=AZUL_OSCURO),
+            textfont=dict(size=12, color=AZUL_TINTA, family=FONT_FAMILY),
             cliponaxis=False,
             customdata=customdata,
             hovertemplate=(
-                "<b>%{x|%Y-%m}</b><br>"
-                "Dividendo real: %{customdata[0]}<br>"
-                f"Promedio móvil {ventana_ma}m: %{{customdata[1]}}<br>"
-                "Variación mensual: %{customdata[2]}<br>"
-                "Variación interanual: %{customdata[3]}<br>"
-                "Distancia al promedio móvil: %{customdata[4]}"
+                "<span style='font-size:12px;color:#6B777B'>%{x}</span><br>"
+                "<b style='font-size:17px'>%{customdata[0]}</b><br>"
+                "<span style='color:#6B777B'>Dividendo real mensual</span><br><br>"
+                "Cambio mensual: <b>%{customdata[1]}</b><br>"
+                "Cambio interanual: <b>%{customdata[2]}</b><br>"
+                f"Tendencia {ventana_ma}m: %{{customdata[3]}}"
                 "<extra></extra>"
             ),
         )
     )
-    fig.add_trace(
-        go.Scatter(
-            x=aux["fecha"],
-            y=aux["media_movil"],
-            mode="lines+markers",
-            name=f"Promedio móvil {ventana_ma} meses",
-            line=dict(width=3.5, color=AZUL_OSCURO, shape="spline", smoothing=0.65),
-            marker=dict(size=6, color="white", line=dict(color=AZUL_OSCURO, width=2)),
-            connectgaps=True,
-            customdata=np.column_stack([aux["media_txt"]]),
-            hovertemplate=(
-                "<b>%{x|%Y-%m}</b><br>"
-                f"Promedio móvil {ventana_ma}m: %{{customdata[0]}}"
-                "<extra></extra>"
-            ),
-        )
-    )
-
-    promedio_periodo = aux["dividendo_real_mm"].mean(skipna=True)
-    if pd.notna(promedio_periodo):
-        fig.add_hline(
-            y=float(promedio_periodo),
-            line_width=1.4,
-            line_dash="dot",
-            line_color=AZUL_ACENTO_2,
-            annotation_text=f"Promedio del período: {fmt_es_num(promedio_periodo, 1)} MM",
-            annotation_position="top left",
-            annotation_font_color=AZUL_ACENTO_4,
-            annotation_bgcolor="rgba(255,255,255,0.88)",
-        )
-
-    ultimo = aux.loc[aux["dividendo_real_mm"].notna()].tail(1)
-    if not ultimo.empty:
-        fila = ultimo.iloc[0]
-        fig.add_annotation(
-            x=fila["fecha"],
-            y=fila["dividendo_real_mm"],
-            text=(
-                f"<b>Último: {fmt_es_num(fila['dividendo_real_mm'], 1)} MM CLP</b><br>"
-                f"{fila['mom_txt']} vs. mes anterior"
-            ),
-            showarrow=True,
-            arrowhead=2,
-            arrowwidth=1.5,
-            arrowcolor=AZUL_OSCURO,
-            ax=-72,
-            ay=-72,
-            bgcolor="rgba(255,255,255,0.96)",
-            bordercolor=AZUL_BORDE,
-            borderwidth=1,
-            borderpad=8,
-            font=dict(size=12, color=AZUL_TINTA),
-        )
 
     fig = aplicar_estilo_figura(
         fig,
         titulo=(
-            f"<b>Dividendos reales mensuales</b>"
-            f"<br><span style='font-size:13px;color:{AZUL_MUTED}'>"
-            f"Valores en millones de CLP de poder adquisitivo constante. "
-            f"Barras oscuras están sobre el promedio móvil de {ventana_ma} meses.</span>"
+            "<b>Dividendos reales mensuales</b>"
+            f"<br><span style='font-size:12px;color:{AZUL_MUTED}'>"
+            "Cada barra es el dividendo del mes. "
+            + (
+                f"La línea punteada es solo una referencia suavizada de {ventana_ma} meses."
+                if mostrar_tendencia != "ocultar"
+                else "La tendencia suavizada está oculta."
+            )
+            + "</span>"
         ),
-        yaxis_title="Millones de CLP reales",
+        yaxis_title="MM CLP reales",
+        hovermode="closest",
+        legend_title="",
     )
 
     n = len(aux)
-    dtick = "M1" if n <= 24 else ("M2" if n <= 48 else ("M3" if n <= 84 else "M6"))
+    paso_ticks = 1 if n <= 18 else (2 if n <= 36 else (3 if n <= 66 else 6))
+    tickvals = aux["fecha_categoria"].iloc[::paso_ticks].tolist()
     maximo = aux["dividendo_real_mm"].max(skipna=True)
+    mostrar_textos = modo_etiquetas != "ninguna"
+
     fig.update_layout(
-        height=650,
-        bargap=0.14,
-        hovermode="x unified",
-        uniformtext_minsize=9,
+        height=625,
+        bargap=0.07,
+        bargroupgap=0,
+        barcornerradius=9,
+        hovermode="closest",
+        uniformtext_minsize=10,
         uniformtext_mode="hide",
-        margin=dict(l=58, r=28, t=132, b=72),
+        margin=dict(l=54, r=26, t=112, b=72),
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.01,
+            y=1.015,
             xanchor="right",
             x=1,
             title_text="",
+            bgcolor="rgba(255,255,255,0)",
         ),
     )
     fig.update_xaxes(
-        title_text="Mes",
-        tickformat="%Y-%m",
-        dtick=dtick,
-        tickangle=-35,
-        rangeslider_visible=False,
+        title_text="",
+        type="category",
+        categoryorder="array",
+        categoryarray=aux["fecha_categoria"].tolist(),
+        tickmode="array",
+        tickvals=tickvals,
+        ticktext=tickvals,
+        tickangle=-35 if n > 18 else 0,
+        fixedrange=False,
     )
     fig.update_yaxes(
         rangemode="tozero",
         tickformat=",.0f",
         separatethousands=True,
-        range=[0, float(maximo) * 1.24] if pd.notna(maximo) and maximo > 0 else None,
+        range=[0, float(maximo) * (1.20 if mostrar_textos else 1.10)]
+        if pd.notna(maximo) and maximo > 0 else None,
+        fixedrange=False,
     )
     return fig
 
@@ -1986,86 +1955,90 @@ def filtrar_df(df: pd.DataFrame, start_date: Optional[str], end_date: Optional[s
 # -------------------------------------------------------------------
 
 CARD_STYLE = {
-    "background": "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(250,252,253,0.99) 100%)",
+    "background": "rgba(255,255,255,0.97)",
     "border": f"1px solid {AZUL_BORDE}",
-    "borderRadius": "18px",
+    "borderRadius": "20px",
     "padding": "24px",
-    "boxShadow": "0 14px 34px rgba(23, 33, 43, 0.08)",
+    "boxShadow": "0 12px 34px rgba(24, 35, 39, 0.07)",
     "minWidth": 0,
 }
 
 PAGE_STYLE = {
-    "maxWidth": "1480px",
+    "maxWidth": "1540px",
     "margin": "0 auto",
-    "padding": "28px 24px 40px",
+    "padding": "26px 24px 46px",
     "fontFamily": FONT_FAMILY,
-    "background": "linear-gradient(180deg, #eef5fb 0%, #fbfcfd 42%, #f2f7fb 100%)",
+    "background": "radial-gradient(circle at 8% 0%, rgba(199,120,66,0.09), transparent 28%), linear-gradient(180deg, #F5F4F0 0%, #EFF3F1 100%)",
     "overflowX": "hidden",
 }
 
 HEADER_STYLE = {
-    "background": f"linear-gradient(135deg, {AZUL_OSCURO} 0%, {AZUL_PRIMARIO} 56%, {AZUL_ACENTO_2} 100%)",
-    "borderRadius": "22px",
-    "padding": "34px 36px",
-    "boxShadow": "0 22px 48px rgba(23, 33, 43, 0.18)",
-    "marginBottom": "28px",
+    "position": "relative",
+    "overflow": "hidden",
+    "background": "linear-gradient(135deg, #172126 0%, #21353A 58%, #2F6B65 100%)",
+    "borderRadius": "26px",
+    "padding": "38px 40px",
+    "boxShadow": "0 24px 54px rgba(23, 33, 38, 0.20)",
+    "marginBottom": "24px",
     "color": "white",
+    "border": "1px solid rgba(255,255,255,0.08)",
 }
 
 HEADER_SOURCE_STYLE = {
     "display": "inline-flex",
     "alignItems": "center",
-    "padding": "8px 14px",
+    "padding": "8px 13px",
     "borderRadius": "999px",
-    "backgroundColor": "rgba(255,255,255,0.14)",
-    "border": "1px solid rgba(255,255,255,0.18)",
-    "fontSize": "13px",
-    "marginTop": "16px",
+    "backgroundColor": "rgba(255,255,255,0.09)",
+    "border": "1px solid rgba(255,255,255,0.14)",
+    "fontSize": "12px",
+    "marginTop": "18px",
+    "color": "rgba(255,255,255,0.86)",
 }
 
 CONTROL_BOX_STYLE = {
     "display": "grid",
-    "gridTemplateColumns": "repeat(auto-fit, minmax(240px, 1fr))",
-    "gap": "18px",
-    "marginBottom": "24px",
+    "gridTemplateColumns": "repeat(auto-fit, minmax(205px, 1fr))",
+    "gap": "14px",
+    "marginBottom": "18px",
 }
 
 KPI_GRID_STYLE = {
     "display": "grid",
     "gridTemplateColumns": "repeat(auto-fit, minmax(210px, 1fr))",
-    "gap": "18px",
-    "marginBottom": "28px",
+    "gap": "14px",
+    "marginBottom": "22px",
 }
 
 ACTION_ROW_STYLE = {
     "display": "flex",
     "flexWrap": "wrap",
-    "gap": "12px",
-    "marginBottom": "28px",
+    "gap": "10px",
+    "marginBottom": "22px",
 }
 
 BUTTON_PRIMARY_STYLE = {
-    "padding": "12px 18px",
-    "borderRadius": "8px",
+    "padding": "11px 17px",
+    "borderRadius": "12px",
     "border": "none",
-    "background": f"linear-gradient(135deg, {AZUL_OSCURO} 0%, {AZUL_PRIMARIO} 68%, {AZUL_ACENTO_1} 100%)",
+    "background": f"linear-gradient(135deg, {AZUL_PRIMARIO} 0%, #244F4B 100%)",
     "color": "white",
     "fontFamily": FONT_FAMILY,
-    "fontWeight": "bold",
-    "boxShadow": "0 10px 24px rgba(20, 108, 148, 0.20)",
+    "fontWeight": "700",
+    "boxShadow": "0 8px 18px rgba(47, 107, 101, 0.20)",
     "transition": "transform 160ms ease, box-shadow 220ms ease, opacity 180ms ease, filter 180ms ease",
     "cursor": "pointer",
 }
 
 BUTTON_SECONDARY_STYLE = {
-    "padding": "12px 18px",
-    "borderRadius": "8px",
+    "padding": "11px 17px",
+    "borderRadius": "12px",
     "border": f"1px solid {AZUL_BORDE}",
-    "backgroundColor": "white",
+    "backgroundColor": "rgba(255,255,255,0.92)",
     "color": AZUL_OSCURO,
     "fontFamily": FONT_FAMILY,
-    "fontWeight": "bold",
-    "boxShadow": "0 8px 20px rgba(23, 33, 43, 0.07)",
+    "fontWeight": "700",
+    "boxShadow": "0 6px 16px rgba(24, 35, 39, 0.06)",
     "transition": "transform 160ms ease, box-shadow 220ms ease, opacity 180ms ease, filter 180ms ease",
     "cursor": "pointer",
 }
@@ -2089,8 +2062,8 @@ GRAPH_CONFIG = {
     },
 }
 GRAPH_ANIMATION_OPTIONS = {
-    "frame": {"duration": 450, "redraw": False},
-    "transition": {"duration": 450, "easing": "cubic-in-out"},
+    "frame": {"duration": 320, "redraw": False},
+    "transition": {"duration": 320, "easing": "cubic-out"},
 }
 
 
@@ -2103,7 +2076,7 @@ def clase_boton_exito(clase_base: str, referencia: Optional[int]) -> str:
 FORM_GRID_STYLE = {
     "display": "grid",
     "gridTemplateColumns": "repeat(auto-fit, minmax(min(100%, 190px), 1fr))",
-    "gap": "16px",
+    "gap": "14px",
     "marginBottom": "18px",
     "width": "100%",
     "maxWidth": "100%",
@@ -2112,8 +2085,8 @@ FORM_GRID_STYLE = {
 }
 
 FORM_LABEL_STYLE = {
-    "fontSize": 13,
-    "fontWeight": "bold",
+    "fontSize": 12,
+    "fontWeight": "700",
     "color": AZUL_OSCURO,
     "marginBottom": "8px",
 }
@@ -2121,7 +2094,7 @@ FORM_LABEL_STYLE = {
 FORM_INPUT_STYLE = {
     "width": "100%",
     "padding": "12px 14px",
-    "borderRadius": "8px",
+    "borderRadius": "12px",
     "border": f"1px solid {AZUL_BORDE}",
     "backgroundColor": "white",
     "fontFamily": FONT_FAMILY,
@@ -2130,22 +2103,22 @@ FORM_INPUT_STYLE = {
 }
 
 TAB_STYLE = {
-    "padding": "14px 18px",
+    "padding": "12px 17px",
     "border": "none",
     "backgroundColor": "rgba(255,255,255,0)",
     "color": AZUL_MUTED,
-    "fontWeight": "bold",
+    "fontWeight": "700",
     "fontFamily": FONT_FAMILY,
 }
 
 TAB_SELECTED_STYLE = {
-    "padding": "14px 18px",
+    "padding": "12px 17px",
     "border": "none",
-    "backgroundColor": "white",
-    "color": AZUL_OSCURO,
-    "fontWeight": "bold",
-    "borderRadius": "8px",
-    "boxShadow": "0 12px 28px rgba(23, 33, 43, 0.08)",
+    "backgroundColor": AZUL_OSCURO,
+    "color": "white",
+    "fontWeight": "700",
+    "borderRadius": "12px",
+    "boxShadow": "0 8px 18px rgba(24, 35, 39, 0.16)",
 }
 
 UPLOAD_STYLE = {
@@ -2155,9 +2128,9 @@ UPLOAD_STYLE = {
     "borderWidth": "1px",
     "borderStyle": "dashed",
     "borderColor": AZUL_MEDIO,
-    "borderRadius": "8px",
+    "borderRadius": "14px",
     "textAlign": "center",
-    "backgroundColor": AZUL_PANEL,
+    "backgroundColor": AZUL_SUAVE,
     "color": AZUL_OSCURO,
     "marginBottom": "10px",
 }
@@ -2166,11 +2139,12 @@ UPLOAD_STYLE = {
 def tarjeta_kpi(titulo: str, valor_id: str, subtitulo_id: str):
     return html.Div(
         [
-            html.Div(titulo, style={"fontSize": 13, "letterSpacing": 0, "textTransform": "uppercase", "color": AZUL_MUTED, "marginBottom": "10px"}),
-            html.Div(id=valor_id, style={"fontSize": 34, "fontWeight": "bold", "color": AZUL_OSCURO, "marginBottom": "6px"}),
-            html.Div(id=subtitulo_id, style={"fontSize": 13, "color": AZUL_MUTED})
+            html.Div(className="metric-accent"),
+            html.Div(titulo, className="metric-title"),
+            html.Div(id=valor_id, className="metric-value"),
+            html.Div(id=subtitulo_id, className="metric-subtitle"),
         ],
-        style={**CARD_STYLE, "padding": "22px 24px"},
+        style={**CARD_STYLE, "padding": "21px 22px", "position": "relative", "overflow": "hidden"},
         className="metric-card",
     )
 
@@ -2178,10 +2152,10 @@ def tarjeta_kpi(titulo: str, valor_id: str, subtitulo_id: str):
 def bloque_control(titulo: str, componente):
     return html.Div(
         [
-            html.Div(titulo, style={"fontSize": 13, "fontWeight": "bold", "color": AZUL_OSCURO, "marginBottom": "12px"}),
+            html.Div(titulo, className="control-title"),
             componente,
         ],
-        style={**CARD_STYLE, "padding": "18px 20px"},
+        style={**CARD_STYLE, "padding": "16px 18px"},
         className="control-card",
     )
 
@@ -2189,10 +2163,10 @@ def bloque_control(titulo: str, componente):
 def tarjeta_grafico(graph_id: str, principal: bool = False):
     estilo = {
         **CARD_STYLE,
-        "padding": "18px 18px 10px",
-        "border": f"1px solid {AZUL_MEDIO if principal else AZUL_BORDE}",
+        "padding": "14px 14px 8px",
+        "border": f"1px solid {'#CFDAD6' if principal else AZUL_BORDE}",
         "boxShadow": (
-            "0 24px 58px rgba(20, 108, 148, 0.16)"
+            "0 20px 48px rgba(24, 35, 39, 0.11)"
             if principal else CARD_STYLE["boxShadow"]
         ),
     }
@@ -2256,49 +2230,106 @@ def build_app(config: Config) -> Dash:
             <style>
                 * { box-sizing: border-box; }
                 html { scroll-behavior: smooth; }
-                body { margin: 0; background: #f2f7fb; }
+                body { margin: 0; background: #EFF3F1; color: #172126; }
                 @keyframes dashboardRise {
-                    from { opacity: 0; transform: translateY(10px); }
+                    from { opacity: 0; transform: translateY(8px); }
                     to { opacity: 1; transform: translateY(0); }
                 }
                 .dashboard-header, .control-card, .metric-card, .chart-card {
-                    animation: dashboardRise 420ms ease both;
+                    animation: dashboardRise 360ms ease both;
+                }
+                .dashboard-header::after {
+                    content: "";
+                    position: absolute;
+                    width: 340px;
+                    height: 340px;
+                    right: -110px;
+                    top: -180px;
+                    border-radius: 50%;
+                    background: radial-gradient(circle, rgba(217,160,109,0.34) 0%, rgba(217,160,109,0) 68%);
+                    pointer-events: none;
+                }
+                .dashboard-header::before {
+                    content: "";
+                    position: absolute;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    height: 3px;
+                    background: linear-gradient(90deg, #C77842, #D9A06D, rgba(217,160,109,0));
                 }
                 .control-card, .metric-card, .chart-card {
-                    transition: transform 180ms ease, box-shadow 220ms ease, border-color 180ms ease;
+                    transition: transform 170ms ease, box-shadow 220ms ease, border-color 180ms ease;
                 }
                 .control-card:hover, .metric-card:hover {
-                    transform: translateY(-3px);
-                    box-shadow: 0 18px 42px rgba(23, 33, 43, 0.12) !important;
+                    transform: translateY(-2px);
+                    box-shadow: 0 16px 38px rgba(24,35,39,0.10) !important;
                 }
                 .chart-card:hover {
-                    border-color: #9fcce4 !important;
-                    box-shadow: 0 22px 48px rgba(23, 33, 43, 0.12) !important;
+                    border-color: #C7D3CF !important;
+                    box-shadow: 0 18px 42px rgba(24,35,39,0.10) !important;
                 }
-                .chart-card-primary {
-                    position: relative;
-                    overflow: hidden;
-                }
+                .chart-card-primary { position: relative; overflow: hidden; }
                 .chart-card-primary::before {
                     content: "";
                     position: absolute;
-                    top: 0; left: 0; right: 0;
-                    height: 4px;
-                    background: linear-gradient(90deg, #143B4D, #146C94, #5EB4E7);
+                    top: 0; left: 28px; right: 28px;
+                    height: 3px;
+                    border-radius: 0 0 999px 999px;
+                    background: linear-gradient(90deg, #2F6B65, #C77842);
                     z-index: 2;
                 }
-                .boton-accion:hover { transform: translateY(-2px); filter: brightness(1.03); }
-                .boton-accion:active { transform: translateY(0); }
-                .dash-graph .modebar { opacity: 0; transition: opacity 160ms ease; }
-                .dash-graph:hover .modebar { opacity: 1; }
-                .Select-control, .DateInput_input, input {
-                    border-radius: 10px !important;
+                .metric-accent {
+                    position: absolute;
+                    width: 5px;
+                    top: 18px;
+                    bottom: 18px;
+                    left: 0;
+                    border-radius: 0 999px 999px 0;
+                    background: linear-gradient(180deg, #2F6B65, #C77842);
                 }
+                .metric-title {
+                    font-size: 11px;
+                    letter-spacing: .07em;
+                    text-transform: uppercase;
+                    color: #6B777B;
+                    margin-bottom: 11px;
+                    font-weight: 750;
+                }
+                .metric-value {
+                    font-size: clamp(27px, 2.2vw, 36px);
+                    line-height: 1.08;
+                    font-weight: 780;
+                    color: #172126;
+                    margin-bottom: 8px;
+                    letter-spacing: -0.035em;
+                }
+                .metric-subtitle { font-size: 12px; color: #6B777B; line-height: 1.45; }
+                .control-title {
+                    font-size: 11px;
+                    letter-spacing: .06em;
+                    text-transform: uppercase;
+                    font-weight: 750;
+                    color: #526166;
+                    margin-bottom: 11px;
+                }
+                .boton-accion:hover { transform: translateY(-2px); filter: brightness(1.025); }
+                .boton-accion:active { transform: translateY(0); }
+                .dash-graph .modebar { opacity: 0; transition: opacity 150ms ease; }
+                .dash-graph:hover .modebar { opacity: .82; }
+                .Select-control, .DateInput_input, input { border-radius: 12px !important; }
+                .Select-control { border-color: #DDE3E1 !important; min-height: 40px; }
+                .Select-placeholder, .Select-value-label { color: #172126 !important; }
+                .rc-slider-track { background-color: #2F6B65 !important; }
+                .rc-slider-handle { border-color: #2F6B65 !important; }
+                .rc-slider-dot-active { border-color: #2F6B65 !important; }
+                .tab-container, .tab-parent { background: transparent !important; }
                 @media (max-width: 760px) {
                     .dashboard-shell { padding: 14px 10px 28px !important; }
-                    .dashboard-header { padding: 25px 22px !important; border-radius: 18px !important; }
+                    .dashboard-header { padding: 28px 23px !important; border-radius: 20px !important; }
                     .dashboard-header h1 { font-size: 34px !important; }
-                    .chart-card { padding: 8px 4px 4px !important; }
+                    .chart-card { padding: 7px 2px 2px !important; border-radius: 16px !important; }
+                    .metric-value { font-size: 29px; }
                     .js-plotly-plot .plotly .main-svg { overflow: visible; }
                 }
             </style>
@@ -2353,15 +2384,30 @@ def build_app(config: Config) -> Dash:
             html.Div(
                 [
                     html.Div(
-                        "Panel de seguimiento",
-                        style={"fontSize": 13, "letterSpacing": 0, "textTransform": "uppercase", "fontWeight": "bold", "opacity": 0.85},
+                        [
+                            html.Span("Panel financiero mensual"),
+                            html.Span(
+                                APP_DESIGN_VERSION,
+                                style={
+                                    "display": "inline-block",
+                                    "marginLeft": "12px",
+                                    "padding": "5px 9px",
+                                    "borderRadius": "999px",
+                                    "background": "rgba(255,255,255,0.14)",
+                                    "border": "1px solid rgba(255,255,255,0.22)",
+                                    "fontSize": "10px",
+                                    "letterSpacing": "0.08em",
+                                },
+                            ),
+                        ],
+                        style={"fontSize": 13, "letterSpacing": 0, "textTransform": "uppercase", "fontWeight": "bold", "opacity": 0.92},
                     ),
                     html.H1(
-                        "Dividendos, cobre y producción",
+                        "Dividendos y desempeño minero",
                         style={"fontSize": "44px", "lineHeight": "1.05", "margin": "10px 0 14px"},
                     ),
                     html.P(
-                        "Dividendos reales, producción y cobre fino en una lectura mensual.",
+                        "Una vista ejecutiva de dividendos reales, producción, ley y valor de cobre fino.",
                         style={"fontSize": "16px", "maxWidth": "760px", "margin": 0, "opacity": 0.92},
                     ),
                     html.Div(id="texto-fuente", style=HEADER_SOURCE_STYLE),
@@ -2377,7 +2423,7 @@ def build_app(config: Config) -> Dash:
                         dcc.DatePickerRange(id="rango-fechas", display_format="YYYY-MM-DD"),
                     ),
                     bloque_control(
-                        "Promedio móvil",
+                        "Meses de suavizado",
                         dcc.Slider(
                             id="ventana-ma",
                             min=3,
@@ -2385,6 +2431,19 @@ def build_app(config: Config) -> Dash:
                             step=1,
                             value=6,
                             marks={i: str(i) for i in range(3, 13)},
+                        ),
+                    ),
+                    bloque_control(
+                        "Línea de tendencia",
+                        dcc.Dropdown(
+                            id="mostrar-tendencia-dividendos",
+                            options=[
+                                {"label": "Mostrar como referencia", "value": "mostrar"},
+                                {"label": "Ocultar", "value": "ocultar"},
+                            ],
+                            value="mostrar",
+                            clearable=False,
+                            searchable=False,
                         ),
                     ),
                     bloque_control(
@@ -2405,12 +2464,12 @@ def build_app(config: Config) -> Dash:
                         dcc.Dropdown(
                             id="modo-etiquetas-dividendos",
                             options=[
-                                {"label": "Automático (recomendado)", "value": "auto"},
-                                {"label": "Todos los meses", "value": "todas"},
+                                {"label": "Ocultar (más limpio)", "value": "ninguna"},
+                                {"label": "Mostrar todos — sin decimales", "value": "todas"},
                                 {"label": "Solo últimos 12 meses", "value": "ultimos12"},
-                                {"label": "Ocultar etiquetas", "value": "ninguna"},
+                                {"label": "Automático", "value": "auto"},
                             ],
-                            value="auto",
+                            value="ninguna",
                             clearable=False,
                             searchable=False,
                         ),
@@ -2443,14 +2502,14 @@ def build_app(config: Config) -> Dash:
                 [
                     html.Div(
                         [
-                            html.Div("GRÁFICO PRINCIPAL", className="eyebrow", style={
+                            html.Div("DIVIDENDOS REALES", className="eyebrow", style={
                                 "fontSize": 12,
                                 "fontWeight": "bold",
                                 "letterSpacing": "0.08em",
                                 "color": AZUL_PRIMARIO,
                             }),
                             html.Div(
-                                "Pase el cursor sobre cualquier mes para ver el valor, el cambio mensual, el cambio interanual y su distancia respecto del promedio móvil.",
+                                "Las barras muestran los valores reales de cada mes. La tendencia es una referencia secundaria y puede ocultarse.",
                                 style={"fontSize": 13, "color": AZUL_MUTED, "marginTop": "5px"},
                             ),
                         ],
@@ -2458,14 +2517,14 @@ def build_app(config: Config) -> Dash:
                     ),
                     tarjeta_grafico("grafico-dividendos", principal=True),
                 ],
-                style={"marginBottom": "28px"},
+                style={"marginBottom": "24px"},
             ),
 
             html.Div(
                 [
                     html.Div(
                         "Crecimiento anual promedio",
-                        style={"fontSize": 13, "letterSpacing": 0, "textTransform": "uppercase", "fontWeight": "bold", "color": AZUL_MUTED},
+                        style={"fontSize": 11, "letterSpacing": "0.07em", "textTransform": "uppercase", "fontWeight": "750", "color": AZUL_MUTED},
                     ),
                     html.Div(
                         [
@@ -3030,9 +3089,18 @@ def build_app(config: Config) -> Dash:
         Input("ventana-ma", "value"),
         Input("variable-x", "value"),
         Input("modo-etiquetas-dividendos", "value"),
+        Input("mostrar-tendencia-dividendos", "value"),
         prevent_initial_call=False
     )
-    def actualizar_dashboard(data_json, start_date, end_date, ventana_ma, variable_x, modo_etiquetas):
+    def actualizar_dashboard(
+        data_json,
+        start_date,
+        end_date,
+        ventana_ma,
+        variable_x,
+        modo_etiquetas,
+        mostrar_tendencia,
+    ):
         vacio = aplicar_estilo_figura(go.Figure(), titulo="Sin datos", yaxis_title=None)
 
         if not data_json:
@@ -3086,7 +3154,12 @@ def build_app(config: Config) -> Dash:
         kpi6_val, kpi6_sub = resumen_crecimiento_anual(dff, "dry_tons", "sum")
         kpi7_val, kpi7_sub = resumen_crecimiento_anual(dff, "grade", "mean")
 
-        fig1 = grafico_dividendos(dff, int(ventana_ma), modo_etiquetas or "auto")
+        fig1 = grafico_dividendos(
+            dff,
+            int(ventana_ma),
+            modo_etiquetas or "ninguna",
+            mostrar_tendencia or "mostrar",
+        )
         fig2 = grafico_indices(dff)
         fig_calendario = grafico_calendario_dividendos(dff)
         fig3 = grafico_produccion(dff)
