@@ -1,4 +1,3 @@
-
 """
 Dashboard interactivo en Dash + Plotly para analizar dividendos, cobre y producción.
 
@@ -94,7 +93,7 @@ class Config:
     fred_fx_series_id: str = os.getenv("FRED_FX_SERIES_ID", "CCUSMA02CLM618N")
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8050"))
-    debug: bool = os.getenv("DEBUG", "true").lower() == "true"
+    debug: bool = os.getenv("DEBUG", "false").lower() == "true"
 
 
 CFG = Config()
@@ -1122,7 +1121,7 @@ AZUL_ACENTO_2 = "#5EB4E7"
 AZUL_ACENTO_3 = "#8FD3FF"
 AZUL_ACENTO_4 = "#0A5E86"
 PALETA_AZUL = [AZUL_PRIMARIO, AZUL_ACENTO_1, AZUL_MEDIO, AZUL_ACENTO_2, AZUL_ACENTO_4, AZUL_OSCURO]
-FONT_FAMILY = "'Trebuchet MS', 'Segoe UI', sans-serif"
+FONT_FAMILY = "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
 
 
 def aplicar_estilo_figura(
@@ -1147,7 +1146,7 @@ def aplicar_estilo_figura(
         font={"family": FONT_FAMILY, "color": AZUL_TINTA},
         colorway=PALETA_AZUL,
         hovermode=hovermode,
-        transition={"duration": 3500, "easing": "cubic-in-out"},
+        transition={"duration": 450, "easing": "cubic-in-out"},
         legend={
             "title": {"text": legend_title},
             "orientation": "h",
@@ -1190,37 +1189,288 @@ def aplicar_estilo_figura(
         fig.update_yaxes(title_text=yaxis_title)
     return fig
 
-def grafico_dividendos(df: pd.DataFrame, ventana_ma: int) -> go.Figure:
-    fig = go.Figure()
+def _texto_barra_dividendo(valor: object) -> str:
+    """Etiqueta compacta para barras expresadas en millones de CLP."""
+    valor_num = pd.to_numeric(pd.Series([valor]), errors="coerce").iloc[0]
+    if pd.isna(valor_num):
+        return ""
+    if abs(float(valor_num)) >= 100:
+        return fmt_es_num(float(valor_num), 0)
+    return fmt_es_num(float(valor_num), 1)
 
+
+def _mascara_etiquetas_dividendos(df: pd.DataFrame, modo: str) -> pd.Series:
+    """Decide qué meses reciben texto para evitar un gráfico saturado."""
+    n = len(df)
+    mascara = pd.Series(False, index=df.index)
+    if modo == "ninguna" or n == 0:
+        return mascara
+    if modo == "todas":
+        return pd.Series(True, index=df.index)
+    if modo == "ultimos12":
+        mascara.iloc[max(0, n - 12):] = True
+        return mascara
+
+    # Modo automático: muestra todo en rangos cortos y espacia el historial
+    # en rangos largos, pero deja siempre visibles los últimos 12 meses.
+    if n <= 24:
+        return pd.Series(True, index=df.index)
+    paso = 2 if n <= 48 else (3 if n <= 84 else 6)
+    mascara.iloc[::paso] = True
+    mascara.iloc[max(0, n - 12):] = True
+
+    # También conserva el máximo y el mínimo positivo del período.
+    valores = pd.to_numeric(df["dividendo_real_mm"], errors="coerce")
+    if valores.notna().any():
+        mascara.loc[valores.idxmax()] = True
+        positivos = valores.loc[valores > 0]
+        if not positivos.empty:
+            mascara.loc[positivos.idxmin()] = True
+    return mascara
+
+
+def grafico_dividendos(
+    df: pd.DataFrame,
+    ventana_ma: int,
+    modo_etiquetas: str = "auto",
+) -> go.Figure:
+    """Gráfico principal del panel, diseñado para lectura ejecutiva."""
+    aux = df.copy().sort_values("fecha").reset_index(drop=True)
+    aux["dividendo_real_mm"] = pd.to_numeric(aux["dividendo_real_mm"], errors="coerce")
+    aux["media_movil"] = rolling_safe(aux["dividendo_real_mm"], ventana_ma)
+    aux["variacion_mensual"] = aux["dividendo_real_mm"].pct_change(fill_method=None)
+    aux["variacion_anual"] = aux["dividendo_real_mm"].pct_change(12, fill_method=None)
+    aux["vs_media_movil"] = aux["dividendo_real_mm"] / aux["media_movil"] - 1
+
+    # Valores preformateados en español para un hover consistente.
+    aux["dividendo_txt"] = aux["dividendo_real_mm"].map(
+        lambda v: f"{fmt_es_num(v, 1)} MM CLP" if pd.notna(v) else "NA"
+    )
+    aux["media_txt"] = aux["media_movil"].map(
+        lambda v: f"{fmt_es_num(v, 1)} MM CLP" if pd.notna(v) else "NA"
+    )
+    aux["mom_txt"] = aux["variacion_mensual"].map(
+        lambda v: fmt_es_pct(v, 1) if pd.notna(v) and np.isfinite(v) else "NA"
+    )
+    aux["yoy_txt"] = aux["variacion_anual"].map(
+        lambda v: fmt_es_pct(v, 1) if pd.notna(v) and np.isfinite(v) else "NA"
+    )
+    aux["vs_ma_txt"] = aux["vs_media_movil"].map(
+        lambda v: fmt_es_pct(v, 1) if pd.notna(v) and np.isfinite(v) else "NA"
+    )
+
+    mascara_texto = _mascara_etiquetas_dividendos(aux, modo_etiquetas)
+    aux["texto_barra"] = [
+        _texto_barra_dividendo(v) if mostrar else ""
+        for v, mostrar in zip(aux["dividendo_real_mm"], mascara_texto)
+    ]
+
+    colores = []
+    for i, fila in aux.iterrows():
+        if i == len(aux) - 1:
+            colores.append(AZUL_OSCURO)
+        elif pd.isna(fila["dividendo_real_mm"]):
+            colores.append(AZUL_CLARO)
+        elif pd.notna(fila["media_movil"]) and fila["dividendo_real_mm"] >= fila["media_movil"]:
+            colores.append(AZUL_PRIMARIO)
+        else:
+            colores.append("#A9CCE3")
+
+    customdata = np.column_stack(
+        [
+            aux["dividendo_txt"],
+            aux["media_txt"],
+            aux["mom_txt"],
+            aux["yoy_txt"],
+            aux["vs_ma_txt"],
+        ]
+    )
+
+    fig = go.Figure()
     fig.add_trace(
         go.Bar(
-            x=df["fecha"],
-            y=df["dividendo_real_mm"],
+            x=aux["fecha"],
+            y=aux["dividendo_real_mm"],
             name="Dividendo real",
-            opacity=0.72,
-            marker=dict(color=AZUL_CLARO, line=dict(color=AZUL_MEDIO, width=1)),
-            hovertemplate="%{x|%Y-%m}<br>%{y:,.1f} MM CLP<extra></extra>",
+            marker=dict(color=colores, line=dict(color="rgba(20,59,77,0.28)", width=0.8)),
+            text=aux["texto_barra"],
+            textposition="outside",
+            textfont=dict(size=11, color=AZUL_OSCURO),
+            cliponaxis=False,
+            customdata=customdata,
+            hovertemplate=(
+                "<b>%{x|%Y-%m}</b><br>"
+                "Dividendo real: %{customdata[0]}<br>"
+                f"Promedio móvil {ventana_ma}m: %{{customdata[1]}}<br>"
+                "Variación mensual: %{customdata[2]}<br>"
+                "Variación interanual: %{customdata[3]}<br>"
+                "Distancia al promedio móvil: %{customdata[4]}"
+                "<extra></extra>"
+            ),
         )
     )
     fig.add_trace(
         go.Scatter(
-            x=df["fecha"],
-            y=rolling_safe(df["dividendo_real_mm"], ventana_ma),
+            x=aux["fecha"],
+            y=aux["media_movil"],
             mode="lines+markers",
-            name=f"Promedio móvil {ventana_ma}m",
-            line=dict(width=3.2, color=AZUL_OSCURO, shape="spline"),
-            marker=dict(size=5, color=AZUL_OSCURO, line=dict(color="white", width=1)),
+            name=f"Promedio móvil {ventana_ma} meses",
+            line=dict(width=3.5, color=AZUL_OSCURO, shape="spline", smoothing=0.65),
+            marker=dict(size=6, color="white", line=dict(color=AZUL_OSCURO, width=2)),
             connectgaps=True,
-            hovertemplate="%{x|%Y-%m}<br>%{y:,.1f} MM CLP<extra></extra>",
+            customdata=np.column_stack([aux["media_txt"]]),
+            hovertemplate=(
+                "<b>%{x|%Y-%m}</b><br>"
+                f"Promedio móvil {ventana_ma}m: %{{customdata[0]}}"
+                "<extra></extra>"
+            ),
         )
     )
 
-    return aplicar_estilo_figura(
+    promedio_periodo = aux["dividendo_real_mm"].mean(skipna=True)
+    if pd.notna(promedio_periodo):
+        fig.add_hline(
+            y=float(promedio_periodo),
+            line_width=1.4,
+            line_dash="dot",
+            line_color=AZUL_ACENTO_2,
+            annotation_text=f"Promedio del período: {fmt_es_num(promedio_periodo, 1)} MM",
+            annotation_position="top left",
+            annotation_font_color=AZUL_ACENTO_4,
+            annotation_bgcolor="rgba(255,255,255,0.88)",
+        )
+
+    ultimo = aux.loc[aux["dividendo_real_mm"].notna()].tail(1)
+    if not ultimo.empty:
+        fila = ultimo.iloc[0]
+        fig.add_annotation(
+            x=fila["fecha"],
+            y=fila["dividendo_real_mm"],
+            text=(
+                f"<b>Último: {fmt_es_num(fila['dividendo_real_mm'], 1)} MM CLP</b><br>"
+                f"{fila['mom_txt']} vs. mes anterior"
+            ),
+            showarrow=True,
+            arrowhead=2,
+            arrowwidth=1.5,
+            arrowcolor=AZUL_OSCURO,
+            ax=-72,
+            ay=-72,
+            bgcolor="rgba(255,255,255,0.96)",
+            bordercolor=AZUL_BORDE,
+            borderwidth=1,
+            borderpad=8,
+            font=dict(size=12, color=AZUL_TINTA),
+        )
+
+    fig = aplicar_estilo_figura(
         fig,
-        titulo=f"Dividendos reales y promedio móvil de {ventana_ma} meses",
-        yaxis_title="MM CLP reales",
+        titulo=(
+            f"<b>Dividendos reales mensuales</b>"
+            f"<br><span style='font-size:13px;color:{AZUL_MUTED}'>"
+            f"Valores en millones de CLP de poder adquisitivo constante. "
+            f"Barras oscuras están sobre el promedio móvil de {ventana_ma} meses.</span>"
+        ),
+        yaxis_title="Millones de CLP reales",
     )
+
+    n = len(aux)
+    dtick = "M1" if n <= 24 else ("M2" if n <= 48 else ("M3" if n <= 84 else "M6"))
+    maximo = aux["dividendo_real_mm"].max(skipna=True)
+    fig.update_layout(
+        height=650,
+        bargap=0.14,
+        hovermode="x unified",
+        uniformtext_minsize=9,
+        uniformtext_mode="hide",
+        margin=dict(l=58, r=28, t=132, b=72),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.01,
+            xanchor="right",
+            x=1,
+            title_text="",
+        ),
+    )
+    fig.update_xaxes(
+        title_text="Mes",
+        tickformat="%Y-%m",
+        dtick=dtick,
+        tickangle=-35,
+        rangeslider_visible=False,
+    )
+    fig.update_yaxes(
+        rangemode="tozero",
+        tickformat=",.0f",
+        separatethousands=True,
+        range=[0, float(maximo) * 1.24] if pd.notna(maximo) and maximo > 0 else None,
+    )
+    return fig
+
+
+def grafico_calendario_dividendos(df: pd.DataFrame) -> go.Figure:
+    """Matriz año/mes para detectar estacionalidad y comparar meses rápidamente."""
+    aux = df[["fecha", "dividendo_real_mm"]].copy()
+    aux["fecha"] = pd.to_datetime(aux["fecha"], errors="coerce")
+    aux["dividendo_real_mm"] = pd.to_numeric(aux["dividendo_real_mm"], errors="coerce")
+    aux = aux.dropna(subset=["fecha"])
+    aux["anio"] = aux["fecha"].dt.year
+    aux["mes"] = aux["fecha"].dt.month
+
+    meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    tabla = aux.pivot_table(index="anio", columns="mes", values="dividendo_real_mm", aggfunc="sum")
+    tabla = tabla.reindex(columns=range(1, 13))
+
+    if tabla.empty:
+        return aplicar_estilo_figura(go.Figure(), "Matriz mensual sin datos", yaxis_title=None)
+
+    z = tabla.to_numpy(dtype=float)
+    texto = np.empty(z.shape, dtype=object)
+    hover = np.empty(z.shape, dtype=object)
+    for i in range(z.shape[0]):
+        for j in range(z.shape[1]):
+            valor = z[i, j]
+            texto[i, j] = _texto_barra_dividendo(valor) if np.isfinite(valor) else ""
+            hover[i, j] = f"{fmt_es_num(valor, 1)} MM CLP" if np.isfinite(valor) else "Sin dato"
+
+    fig = go.Figure(
+        go.Heatmap(
+            z=z,
+            x=meses,
+            y=[str(a) for a in tabla.index],
+            text=texto,
+            texttemplate="%{text}",
+            textfont=dict(size=11, color=AZUL_TINTA),
+            customdata=hover,
+            hovertemplate="<b>%{y} · %{x}</b><br>%{customdata}<extra></extra>",
+            colorscale=[
+                [0.0, "#F4F9FC"],
+                [0.35, "#D4EAF6"],
+                [0.70, "#81BFE0"],
+                [1.0, "#2F80C9"],
+            ],
+            colorbar=dict(title="MM CLP", thickness=14, len=0.72),
+            xgap=4,
+            ygap=4,
+        )
+    )
+    fig = aplicar_estilo_figura(
+        fig,
+        titulo=(
+            f"<b>Mapa mensual de dividendos reales</b>"
+            f"<br><span style='font-size:13px;color:{AZUL_MUTED}'>"
+            "Compare rápidamente meses y años; una celda más intensa representa un dividendo mayor.</span>"
+        ),
+        xaxis_title="Mes",
+        yaxis_title="Año",
+        hovermode="closest",
+        legend_title="",
+    )
+    fig.update_layout(height=max(380, 72 * len(tabla.index) + 180), margin=dict(l=56, r=42, t=120, b=52))
+    fig.update_xaxes(side="top", showgrid=False)
+    fig.update_yaxes(autorange="reversed", showgrid=False)
+    return fig
 
 
 def grafico_indices(df: pd.DataFrame) -> go.Figure:
@@ -1460,18 +1710,17 @@ def grafico_correlaciones(df: pd.DataFrame, max_lag: int = 3) -> go.Figure:
 
 def grafico_modelo(df_modelo: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
-
     fig.add_trace(
         go.Scatter(
             x=df_modelo["fecha"],
             y=df_modelo["dividendo_real"] / 1_000_000,
             mode="lines+markers",
             name="Observado",
-            line=dict(width=3),
-            hovertemplate="%{x|%Y-%m}<br>%{y:,.1f} MM CLP<extra></extra>",
+            line=dict(width=3, color=AZUL_OSCURO),
+            marker=dict(size=7, color=AZUL_OSCURO, line=dict(color="white", width=1)),
+            hovertemplate="%{x|%Y-%m}<br>Observado: %{y:,.1f} MM CLP<extra></extra>",
         )
     )
-
     if df_modelo["pred_dividendo_real"].notna().any():
         fig.add_trace(
             go.Scatter(
@@ -1479,41 +1728,53 @@ def grafico_modelo(df_modelo: pd.DataFrame) -> go.Figure:
                 y=df_modelo["pred_dividendo_real"] / 1_000_000,
                 mode="lines",
                 name="Esperado por modelo",
-                line=dict(width=2, dash="dot"),
-                hovertemplate="%{x|%Y-%m}<br>%{y:,.1f} MM CLP<extra></extra>",
+                line=dict(width=2.6, dash="dot", color=AZUL_ACENTO_1),
+                hovertemplate="%{x|%Y-%m}<br>Esperado: %{y:,.1f} MM CLP<extra></extra>",
             )
         )
-
-    fig.update_layout(
-        template="plotly_white",
-        title="Dividendos observados vs dividendo esperado por modelo simple",
+    anomalos = df_modelo.loc[df_modelo["anomalia"].fillna(False)].copy()
+    if not anomalos.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=anomalos["fecha"],
+                y=anomalos["dividendo_real"] / 1_000_000,
+                mode="markers",
+                name="Mes atípico",
+                marker=dict(size=13, symbol="diamond", color="#D95D67", line=dict(color="white", width=1.5)),
+                hovertemplate="%{x|%Y-%m}<br>Mes atípico: %{y:,.1f} MM CLP<extra></extra>",
+            )
+        )
+    fig = aplicar_estilo_figura(
+        fig,
+        titulo="Dividendos observados frente al nivel esperado por el modelo",
         yaxis_title="MM CLP reales",
-        xaxis_title="Fecha",
-        hovermode="x unified",
-        legend_title="Serie",
-        margin=dict(l=40, r=20, t=60, b=40),
     )
+    fig.update_layout(height=520)
     return fig
 
 
 def grafico_residuos(df_modelo: pd.DataFrame) -> go.Figure:
     aux = df_modelo.copy()
-    aux["color"] = np.where(aux["anomalia"], "Atípico", "Normal")
-
+    aux["clasificacion"] = np.where(aux["anomalia"].fillna(False), "Atípico", "Dentro de rango")
     fig = px.bar(
         aux,
         x="fecha",
         y="z_residuo",
-        color="color",
-        template="plotly_white",
-        title="Residuos estandarizados del modelo",
-        labels={"z_residuo": "Residuo estandarizado", "fecha": "Fecha"},
-        hover_data={"fecha_label": True, "residuo_modelo": ":,.0f"},
+        color="clasificacion",
+        color_discrete_map={"Dentro de rango": AZUL_PRIMARIO, "Atípico": "#D95D67"},
+        labels={"z_residuo": "Desviaciones estándar", "fecha": "Fecha"},
+        hover_data={"fecha_label": True, "residuo_modelo": ":,.0f", "clasificacion": False},
     )
-    fig.add_hline(y=1.5, line_dash="dot")
-    fig.add_hline(y=-1.5, line_dash="dot")
-    fig.update_layout(hovermode="x unified", margin=dict(l=40, r=20, t=60, b=40))
+    fig.add_hline(y=1.5, line_dash="dot", line_color="#D95D67", annotation_text="Umbral +1,5")
+    fig.add_hline(y=-1.5, line_dash="dot", line_color="#D95D67", annotation_text="Umbral -1,5")
+    fig = aplicar_estilo_figura(
+        fig,
+        titulo="Desviación de cada mes respecto del modelo",
+        yaxis_title="Residuo estandarizado",
+    )
+    fig.update_layout(height=460, bargap=0.16)
     return fig
+
 
 
 # -------------------------------------------------------------------
@@ -1720,9 +1981,9 @@ def filtrar_df(df: pd.DataFrame, start_date: Optional[str], end_date: Optional[s
 CARD_STYLE = {
     "background": "linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(250,252,253,0.99) 100%)",
     "border": f"1px solid {AZUL_BORDE}",
-    "borderRadius": "8px",
+    "borderRadius": "18px",
     "padding": "24px",
-    "boxShadow": "0 16px 36px rgba(23, 33, 43, 0.09)",
+    "boxShadow": "0 14px 34px rgba(23, 33, 43, 0.08)",
     "minWidth": 0,
 }
 
@@ -1737,7 +1998,7 @@ PAGE_STYLE = {
 
 HEADER_STYLE = {
     "background": f"linear-gradient(135deg, {AZUL_OSCURO} 0%, {AZUL_PRIMARIO} 56%, {AZUL_ACENTO_2} 100%)",
-    "borderRadius": "8px",
+    "borderRadius": "22px",
     "padding": "34px 36px",
     "boxShadow": "0 22px 48px rgba(23, 33, 43, 0.18)",
     "marginBottom": "28px",
@@ -1748,7 +2009,7 @@ HEADER_SOURCE_STYLE = {
     "display": "inline-flex",
     "alignItems": "center",
     "padding": "8px 14px",
-    "borderRadius": "8px",
+    "borderRadius": "999px",
     "backgroundColor": "rgba(255,255,255,0.14)",
     "border": "1px solid rgba(255,255,255,0.18)",
     "fontSize": "13px",
@@ -1806,10 +2067,23 @@ BOTON_PRIMARIO_CLASE = "boton-accion boton-primario"
 BOTON_SECUNDARIO_CLASE = "boton-accion boton-secundario"
 BOTON_AUTO_TEXT = "Completar IPC, cobre y USD/CLP"
 BOTON_GUARDAR_TEXT = "Guardar mes en SQL"
-GRAPH_CONFIG = {"displayModeBar": False, "responsive": True}
+GRAPH_CONFIG = {
+    "displayModeBar": True,
+    "displaylogo": False,
+    "responsive": True,
+    "scrollZoom": False,
+    "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"],
+    "toImageButtonOptions": {
+        "format": "png",
+        "filename": "dashboard_dividendos",
+        "height": 900,
+        "width": 1600,
+        "scale": 2,
+    },
+}
 GRAPH_ANIMATION_OPTIONS = {
-    "frame": {"duration": 4250, "redraw": False},
-    "transition": {"duration": 3500, "easing": "cubic-in-out"},
+    "frame": {"duration": 450, "redraw": False},
+    "transition": {"duration": 450, "easing": "cubic-in-out"},
 }
 
 
@@ -1905,7 +2179,16 @@ def bloque_control(titulo: str, componente):
     )
 
 
-def tarjeta_grafico(graph_id: str):
+def tarjeta_grafico(graph_id: str, principal: bool = False):
+    estilo = {
+        **CARD_STYLE,
+        "padding": "18px 18px 10px",
+        "border": f"1px solid {AZUL_MEDIO if principal else AZUL_BORDE}",
+        "boxShadow": (
+            "0 24px 58px rgba(20, 108, 148, 0.16)"
+            if principal else CARD_STYLE["boxShadow"]
+        ),
+    }
     return html.Div(
         [
             dcc.Graph(
@@ -1916,8 +2199,8 @@ def tarjeta_grafico(graph_id: str):
                 className="animated-graph",
             )
         ],
-        style=CARD_STYLE,
-        className="chart-card",
+        style=estilo,
+        className="chart-card chart-card-primary" if principal else "chart-card",
     )
 
 
@@ -1933,6 +2216,74 @@ def campo_formulario(titulo: str, componente):
 
 def build_app(config: Config) -> Dash:
     app = Dash(__name__, title="Dividendos, cobre y producción")
+    app.index_string = """
+    <!DOCTYPE html>
+    <html>
+        <head>
+            {%metas%}
+            <title>{%title%}</title>
+            {%favicon%}
+            {%css%}
+            <style>
+                * { box-sizing: border-box; }
+                html { scroll-behavior: smooth; }
+                body { margin: 0; background: #f2f7fb; }
+                @keyframes dashboardRise {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .dashboard-header, .control-card, .metric-card, .chart-card {
+                    animation: dashboardRise 420ms ease both;
+                }
+                .control-card, .metric-card, .chart-card {
+                    transition: transform 180ms ease, box-shadow 220ms ease, border-color 180ms ease;
+                }
+                .control-card:hover, .metric-card:hover {
+                    transform: translateY(-3px);
+                    box-shadow: 0 18px 42px rgba(23, 33, 43, 0.12) !important;
+                }
+                .chart-card:hover {
+                    border-color: #9fcce4 !important;
+                    box-shadow: 0 22px 48px rgba(23, 33, 43, 0.12) !important;
+                }
+                .chart-card-primary {
+                    position: relative;
+                    overflow: hidden;
+                }
+                .chart-card-primary::before {
+                    content: "";
+                    position: absolute;
+                    top: 0; left: 0; right: 0;
+                    height: 4px;
+                    background: linear-gradient(90deg, #143B4D, #146C94, #5EB4E7);
+                    z-index: 2;
+                }
+                .boton-accion:hover { transform: translateY(-2px); filter: brightness(1.03); }
+                .boton-accion:active { transform: translateY(0); }
+                .dash-graph .modebar { opacity: 0; transition: opacity 160ms ease; }
+                .dash-graph:hover .modebar { opacity: 1; }
+                .Select-control, .DateInput_input, input {
+                    border-radius: 10px !important;
+                }
+                @media (max-width: 760px) {
+                    .dashboard-shell { padding: 14px 10px 28px !important; }
+                    .dashboard-header { padding: 25px 22px !important; border-radius: 18px !important; }
+                    .dashboard-header h1 { font-size: 34px !important; }
+                    .chart-card { padding: 8px 4px 4px !important; }
+                    .js-plotly-plot .plotly .main-svg { overflow: visible; }
+                }
+            </style>
+        </head>
+        <body>
+            {%app_entry%}
+            <footer>
+                {%config%}
+                {%scripts%}
+                {%renderer%}
+            </footer>
+        </body>
+    </html>
+    """
 
     app.layout = html.Div(
         [
@@ -1991,6 +2342,21 @@ def build_app(config: Config) -> Dash:
                             clearable=False
                         ),
                     ),
+                    bloque_control(
+                        "Números sobre las barras",
+                        dcc.Dropdown(
+                            id="modo-etiquetas-dividendos",
+                            options=[
+                                {"label": "Automático (recomendado)", "value": "auto"},
+                                {"label": "Todos los meses", "value": "todas"},
+                                {"label": "Solo últimos 12 meses", "value": "ultimos12"},
+                                {"label": "Ocultar etiquetas", "value": "ninguna"},
+                            ],
+                            value="auto",
+                            clearable=False,
+                            searchable=False,
+                        ),
+                    ),
                 ],
                 style=CONTROL_BOX_STYLE
             ),
@@ -2013,6 +2379,28 @@ def build_app(config: Config) -> Dash:
                     tarjeta_kpi("Meses con producción", "kpi4-valor", "kpi4-sub"),
                 ],
                 style=KPI_GRID_STYLE
+            ),
+
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Div("GRÁFICO PRINCIPAL", className="eyebrow", style={
+                                "fontSize": 12,
+                                "fontWeight": "bold",
+                                "letterSpacing": "0.08em",
+                                "color": AZUL_PRIMARIO,
+                            }),
+                            html.Div(
+                                "Pase el cursor sobre cualquier mes para ver el valor, el cambio mensual, el cambio interanual y su distancia respecto del promedio móvil.",
+                                style={"fontSize": 13, "color": AZUL_MUTED, "marginTop": "5px"},
+                            ),
+                        ],
+                        style={"marginBottom": "10px", "padding": "0 6px"},
+                    ),
+                    tarjeta_grafico("grafico-dividendos", principal=True),
+                ],
+                style={"marginBottom": "28px"},
             ),
 
             html.Div(
@@ -2045,8 +2433,8 @@ def build_app(config: Config) -> Dash:
                         children=[
                             html.Div(
                                 [
-                                    tarjeta_grafico("grafico-dividendos"),
                                     tarjeta_grafico("grafico-indices"),
+                                    tarjeta_grafico("grafico-calendario-dividendos"),
                                 ],
                                 style={"display": "grid", "gap": "20px", "paddingTop": "22px"},
                             ),
@@ -2062,6 +2450,36 @@ def build_app(config: Config) -> Dash:
                                     tarjeta_grafico("grafico-produccion"),
                                     tarjeta_grafico("grafico-dispersion"),
                                     tarjeta_grafico("grafico-correlaciones"),
+                                ],
+                                style={"display": "grid", "gap": "20px", "paddingTop": "22px"},
+                            ),
+                        ],
+                    ),
+                    dcc.Tab(
+                        label="Diagnóstico",
+                        style=TAB_STYLE,
+                        selected_style=TAB_SELECTED_STYLE,
+                        children=[
+                            html.Div(
+                                [
+                                    html.Div(
+                                        "El modelo simple estima un dividendo esperado usando cobre, producción disponible, el dividendo anterior y tendencia. Los residuos ayudan a detectar meses inusuales; no constituyen una predicción financiera.",
+                                        style={
+                                            **CARD_STYLE,
+                                            "fontSize": 13,
+                                            "lineHeight": "1.6",
+                                            "color": AZUL_MUTED,
+                                        },
+                                    ),
+                                    tarjeta_grafico("grafico-modelo"),
+                                    tarjeta_grafico("grafico-residuos"),
+                                    html.Div(
+                                        [
+                                            html.H4("Meses que más se apartan del modelo", style={"marginTop": 0, "color": AZUL_OSCURO}),
+                                            html.Div(id="contenedor-tabla-anomalias"),
+                                        ],
+                                        style={**CARD_STYLE, "overflow": "hidden"},
+                                    ),
                                 ],
                                 style={"display": "grid", "gap": "20px", "paddingTop": "22px"},
                             ),
@@ -2540,25 +2958,30 @@ def build_app(config: Config) -> Dash:
         Output("kpi7-sub", "children"),
         Output("grafico-dividendos", "figure"),
         Output("grafico-indices", "figure"),
+        Output("grafico-calendario-dividendos", "figure"),
         Output("grafico-produccion", "figure"),
         Output("grafico-dispersion", "figure"),
         Output("grafico-correlaciones", "figure"),
+        Output("grafico-modelo", "figure"),
+        Output("grafico-residuos", "figure"),
+        Output("contenedor-tabla-anomalias", "children"),
         Output("contenedor-tabla-datos", "children"),
         Input("store-datos", "data"),
         Input("rango-fechas", "start_date"),
         Input("rango-fechas", "end_date"),
         Input("ventana-ma", "value"),
         Input("variable-x", "value"),
+        Input("modo-etiquetas-dividendos", "value"),
         prevent_initial_call=False
     )
-    def actualizar_dashboard(data_json, start_date, end_date, ventana_ma, variable_x):
+    def actualizar_dashboard(data_json, start_date, end_date, ventana_ma, variable_x, modo_etiquetas):
         vacio = aplicar_estilo_figura(go.Figure(), titulo="Sin datos", yaxis_title=None)
 
         if not data_json:
             return (
                 "NA", "", "NA", "", "NA", "", "NA", "", "NA", "", "NA", "", "NA", "",
-                vacio, vacio, vacio, vacio, vacio,
-                html.Div("Sin datos"),
+                vacio, vacio, vacio, vacio, vacio, vacio, vacio, vacio,
+                html.Div("Sin datos"), html.Div("Sin datos"),
             )
 
         df = pd.read_json(io.StringIO(data_json), orient="split")
@@ -2569,8 +2992,8 @@ def build_app(config: Config) -> Dash:
         if dff.empty:
             return (
                 "NA", "", "NA", "", "NA", "", "NA", "", "NA", "", "NA", "", "NA", "",
-                vacio, vacio, vacio, vacio, vacio,
-                html.Div("Sin datos"),
+                vacio, vacio, vacio, vacio, vacio, vacio, vacio, vacio,
+                html.Div("Sin datos"), html.Div("Sin datos"),
             )
 
         # KPIs
@@ -2584,7 +3007,15 @@ def build_app(config: Config) -> Dash:
         kpi1_sub = "Promedio del rango filtrado"
 
         kpi2_val = fmt_es_moneda_mm(ult_div)
-        kpi2_sub = f"Último mes: {dff['fecha'].max().strftime('%Y-%m')}"
+        serie_div = pd.to_numeric(dff["dividendo_real"], errors="coerce")
+        cambio_mensual = serie_div.pct_change(fill_method=None).iloc[-1] if len(serie_div) >= 2 else np.nan
+        cambio_anual = serie_div.pct_change(12, fill_method=None).iloc[-1] if len(serie_div) >= 13 else np.nan
+        partes_ultimo = [f"Mes {dff['fecha'].max().strftime('%Y-%m')}"]
+        if pd.notna(cambio_mensual) and np.isfinite(cambio_mensual):
+            partes_ultimo.append(f"{fmt_es_pct(cambio_mensual)} mensual")
+        if pd.notna(cambio_anual) and np.isfinite(cambio_anual):
+            partes_ultimo.append(f"{fmt_es_pct(cambio_anual)} interanual")
+        kpi2_sub = " · ".join(partes_ultimo)
 
         kpi3_val = fmt_es_moneda_mm(ult_fino) if pd.notna(ult_fino) else "NA"
         kpi3_sub = "Valor cobre fino neto real"
@@ -2597,18 +3028,24 @@ def build_app(config: Config) -> Dash:
         kpi6_val, kpi6_sub = resumen_crecimiento_anual(dff, "dry_tons", "sum")
         kpi7_val, kpi7_sub = resumen_crecimiento_anual(dff, "grade", "mean")
 
-        fig1 = grafico_dividendos(dff, int(ventana_ma))
+        fig1 = grafico_dividendos(dff, int(ventana_ma), modo_etiquetas or "auto")
         fig2 = grafico_indices(dff)
+        fig_calendario = grafico_calendario_dividendos(dff)
         fig3 = grafico_produccion(dff)
         fig4 = grafico_dispersion(dff, variable_x=variable_x)
         fig5 = grafico_correlaciones(dff)
+        df_modelo = ajustar_modelo_anomalias(dff)
+        fig_modelo = grafico_modelo(df_modelo)
+        fig_residuos = grafico_residuos(df_modelo)
+        tabla_anomalias = construir_tabla_anomalias(df_modelo)
         tabla_datos = construir_tabla_datos(dff)
 
         return (
             kpi1_val, kpi1_sub, kpi2_val, kpi2_sub,
             kpi3_val, kpi3_sub, kpi4_val, kpi4_sub,
             kpi5_val, kpi5_sub, kpi6_val, kpi6_sub, kpi7_val, kpi7_sub,
-            fig1, fig2, fig3, fig4, fig5, tabla_datos
+            fig1, fig2, fig_calendario, fig3, fig4, fig5,
+            fig_modelo, fig_residuos, tabla_anomalias, tabla_datos
         )
 
     # ---------------------------------------------------------------
