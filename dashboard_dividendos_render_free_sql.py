@@ -41,6 +41,8 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import quote
 
+from flask import jsonify, request
+
 import numpy as np
 import pandas as pd
 import requests
@@ -97,6 +99,11 @@ class Config:
 
 
 CFG = Config()
+BUILD_VERSION = (
+    os.getenv("RENDER_GIT_COMMIT")
+    or os.getenv("DASH_BUILD_VERSION")
+    or str(int(os.path.getmtime(__file__)))
+)
 HTTP_HEADERS = {"User-Agent": "Mozilla/5.0"}
 LIBRAS_POR_TONELADA_METRICA = 2204.62262185
 MESES_ES = {
@@ -2216,6 +2223,28 @@ def campo_formulario(titulo: str, componente):
 
 def build_app(config: Config) -> Dash:
     app = Dash(__name__, title="Dividendos, cobre y producción")
+    server = app.server
+
+    @server.after_request
+    def evitar_cache_de_layout(response):
+        """Evita mezclar callbacks de versiones distintas tras un deploy en Render."""
+        ruta = request.path
+        if (
+            ruta == "/"
+            or ruta == "/build-version"
+            or ruta.startswith("/_dash-")
+        ):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        return response
+
+    @server.get("/build-version")
+    def build_version_endpoint():
+        respuesta = jsonify({"version": BUILD_VERSION})
+        respuesta.headers["Cache-Control"] = "no-store, max-age=0"
+        return respuesta
+
     app.index_string = """
     <!DOCTYPE html>
     <html>
@@ -2281,9 +2310,38 @@ def build_app(config: Config) -> Dash:
                 {%scripts%}
                 {%renderer%}
             </footer>
+            <script>
+                (function () {
+                    const pageBuild = "__DASH_BUILD_VERSION__";
+                    let reloading = false;
+
+                    async function verifyBuild() {
+                        if (reloading || document.visibilityState !== "visible") return;
+                        try {
+                            const response = await fetch(
+                                "/build-version?t=" + Date.now(),
+                                { cache: "no-store", credentials: "same-origin" }
+                            );
+                            if (!response.ok) return;
+                            const payload = await response.json();
+                            if (payload.version && payload.version !== pageBuild) {
+                                reloading = true;
+                                window.location.reload();
+                            }
+                        } catch (_error) {
+                            // Un fallo temporal de red no debe interrumpir el dashboard.
+                        }
+                    }
+
+                    window.addEventListener("focus", verifyBuild);
+                    document.addEventListener("visibilitychange", verifyBuild);
+                    window.setInterval(verifyBuild, 30000);
+                })();
+            </script>
         </body>
     </html>
     """
+    app.index_string = app.index_string.replace("__DASH_BUILD_VERSION__", BUILD_VERSION)
 
     app.layout = html.Div(
         [
